@@ -34,24 +34,23 @@ def run_git(*args, env=None):
 def read_records():
     if not MARKER_FILE.exists():
         return ""
-
     return MARKER_FILE.read_text(encoding="utf-8")
 
 
 def existing_entry_numbers(content, target_date):
-    """Find existing entries for a date, including the older format."""
-    pattern = re.compile(
+    """Recognize old and new record formats."""
+    patterns = [
         rf"^- {re.escape(target_date)}: generated backfill record"
         rf"(?: \(entry (\d+) of \d+\))?$",
-        re.MULTILINE,
-    )
+        rf"^- .*`{re.escape(target_date)}` — Timeline synchronized "
+        rf"\((\d+)/\d+\)$",
+    ]
 
     numbers = set()
 
-    for match in pattern.finditer(content):
-        # Older version used one unnumbered record per date.
-        number = int(match.group(1)) if match.group(1) else 1
-        numbers.add(number)
+    for pattern in patterns:
+        for match in re.finditer(pattern, content, re.MULTILINE):
+            numbers.add(int(match.group(1)) if match.group(1) else 1)
 
     return numbers
 
@@ -102,9 +101,14 @@ def main():
 
     if not MARKER_FILE.exists():
         MARKER_FILE.write_text(
-            "# Generated backfill records\n\n"
-            "These are generated records, not evidence of work "
-            "performed on the listed dates.\n\n",
+            "# 🌀 StreakBackfill — Time Loop Activated\n\n"
+            "> Yesterday is another timeline. Today is another commit.\n\n"
+            "```text\n"
+            "  [ TIME ENGINE: ONLINE ]\n"
+            "  [ TIMELINE: SYNCHRONIZED ]\n"
+            "  [ COMMIT ENGINE: RUNNING ]\n"
+            "```\n\n"
+            "## ⚡ Timeline Records\n\n",
             encoding="utf-8",
         )
 
@@ -124,8 +128,8 @@ def main():
                 continue
 
             marker = (
-                f"- {day_text}: generated backfill record "
-                f"(entry {entry_number} of {commits_per_day})"
+                f"- 🟢 `{day_text}` — Timeline synchronized "
+                f"({entry_number}/{commits_per_day})"
             )
 
             with MARKER_FILE.open("a", encoding="utf-8") as file:
@@ -133,8 +137,6 @@ def main():
 
             run_git("add", str(MARKER_FILE))
 
-            # Set the author date to the selected past date.
-            # Keep the committer date at the actual execution time.
             author_time = datetime.combine(
                 day,
                 time(12, entry_number - 1, tzinfo=IST),
@@ -144,7 +146,6 @@ def main():
             env["GIT_AUTHOR_NAME"] = actor
             env["GIT_AUTHOR_EMAIL"] = email
             env["GIT_AUTHOR_DATE"] = author_time
-
             env["GIT_COMMITTER_NAME"] = "github-actions[bot]"
             env["GIT_COMMITTER_EMAIL"] = (
                 "41898282+github-actions[bot]@users.noreply.github.com"
@@ -154,7 +155,7 @@ def main():
             run_git(
                 "commit",
                 "-m",
-                f"chore(backfill): labelled record for {day_text} "
+                f"chore: timeline synchronized {day_text} "
                 f"({entry_number}/{commits_per_day})",
                 env=env,
             )
@@ -165,12 +166,6 @@ def main():
             print(
                 f"CREATED {day_text}: "
                 f"entry {entry_number}/{commits_per_day}"
-            )
-
-        if len(existing) >= commits_per_day:
-            print(
-                f"CHECKED {day_text}: "
-                f"{len(existing)} existing record(s) found."
             )
 
     print(
