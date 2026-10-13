@@ -8,14 +8,23 @@ on:
         description: "First past date (YYYY-MM-DD)"
         required: true
         type: string
+
       end_date:
         description: "Last past date (YYYY-MM-DD)"
         required: true
         type: string
+
       author_email:
-        description: "Verified email linked to your GitHub account"
+        description: "Verified email associated with your GitHub account"
         required: true
         type: string
+
+      commits_per_day:
+        description: "Number of labelled records per date (1-5)"
+        required: true
+        type: number
+        default: 1
+
       confirm_backfill:
         description: "Confirm creation of labelled backfill records"
         required: true
@@ -32,16 +41,17 @@ concurrency:
 jobs:
   backfill:
     if: ${{ inputs.confirm_backfill }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - name: Check out default branch
+        uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -50,15 +60,14 @@ jobs:
           START_DATE: ${{ inputs.start_date }}
           END_DATE: ${{ inputs.end_date }}
           AUTHOR_EMAIL: ${{ inputs.author_email }}
+          COMMITS_PER_DAY: ${{ inputs.commits_per_day }}
           CONFIRM_BACKFILL: ${{ inputs.confirm_backfill }}
           GITHUB_ACTOR_NAME: ${{ github.actor }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: python .github/scripts/backfill.py
 
-      - name: Push records to default branch
+      - name: Push to default branch
         env:
-          GH_TOKEN: ${{ github.token }}
           TARGET_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          git push \
-            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            "HEAD:refs/heads/${TARGET_BRANCH}"
+          git push origin "HEAD:refs/heads/${TARGET_BRANCH}"
